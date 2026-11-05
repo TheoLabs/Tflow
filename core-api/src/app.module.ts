@@ -4,11 +4,13 @@ import { GlobalDomainModule } from '@modules/global-domain.module';
 import { DatabasesModule } from '@databases';
 import { ContextMiddleware, UUIDMiddleware } from '@middlewares';
 import { ContextModule } from '@libs/context';
+import { APP_INTERCEPTOR } from '@nestjs/core';
+import { RequestLoggerInterceptor } from '@libs/interceptors';
 
 @Module({
   imports: [ConfigsModule, DatabasesModule, GlobalDomainModule, ContextModule],
   controllers: [],
-  providers: [],
+  providers: [{ provide: APP_INTERCEPTOR, useClass: RequestLoggerInterceptor }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
