@@ -29,7 +29,8 @@
     "mysql2": "^3.24.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "typeorm": "^1.1.2"
+    "typeorm": "^1.1.2",
+    "uuid": "^14.0.3"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",

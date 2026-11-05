@@ -1,7 +1,10 @@
+import { Context, ContextKey } from '@libs/context';
 import { Controller, Get } from '@nestjs/common';
 
 @Controller('health')
 export class HealthController {
+  constructor(private readonly context: Context) {}
+
   @Get()
   healthCheck() {
     // 1. Destructure body, params, query
