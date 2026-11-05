@@ -1,8 +1,9 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { logger } from '@libs/logger';
 
 (async () => {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { logger });
 
   // NOTE: 안전한 종료를 위한 코드 (graceful shutdown)
   app.enableShutdownHooks();

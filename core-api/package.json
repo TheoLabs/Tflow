@@ -27,10 +27,12 @@
     "@nestjs/platform-express": "^12.0.1",
     "@nestjs/typeorm": "^12.0.2",
     "mysql2": "^3.24.6",
+    "nest-winston": "^2.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "typeorm": "^1.1.2",
-    "uuid": "^14.0.3"
+    "uuid": "^14.0.3",
+    "winston": "^3.19.0"
   },
   "devDependencies": {
     "@nestjs/cli": "^12.0.0",
