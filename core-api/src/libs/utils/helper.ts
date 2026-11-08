@@ -1,4 +1,5 @@
 import { FindOptionsWhere } from 'typeorm';
+import { PaginationOptions } from './pagination';
 
 type NonFunction<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any ? never : K]: T[K];
@@ -65,4 +66,8 @@ export function stripUndefined<T>(obj: StrippableWhere<T>): StrictFindOptionsWhe
 
   // 최종 결과는 TypeORM 검색 조건 객체 타입으로 단언하여 반환합니다.
   return stripped as StrictFindOptionsWhere<T>;
+}
+
+export function pickPagination(options?: PaginationOptions) {
+  return { page: options?.page, limit: options?.limit };
 }

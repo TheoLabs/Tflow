@@ -13,8 +13,8 @@ type Ctor = {
   name: string;
   email: string;
   employeeNumber: string;
-  departmentId: number | null;
-  roleId: number | null;
+  departmentId?: number | null;
+  roleId?: number | null;
 };
 
 @Entity()
@@ -55,8 +55,12 @@ export class Member extends DddRootAggregate {
       this.employeeNumber = args.employeeNumber;
       this.status = MemberStatus.ACTIVE;
       this.joinedOn = today();
-      this.departmentId = args.departmentId;
-      this.roleId = args.roleId;
+      this.departmentId = args.departmentId ?? null;
+      this.roleId = args.roleId ?? null;
     }
+  }
+
+  static of(args: Ctor) {
+    return new Member(args);
   }
 }

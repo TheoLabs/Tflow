@@ -8,7 +8,14 @@ export class MemberRepository extends DddRepository<Member> {
   entityClass = Member;
 
   async find(
-    conditions: { id?: number; name?: string; email?: string; searchKey?: string; searchValue?: string },
+    conditions: {
+      id?: number;
+      name?: string;
+      email?: string;
+      employeeNumber?: string;
+      searchKey?: string;
+      searchValue?: string;
+    },
     options?: TypeormRelationOptions<Member>
   ) {
     return this.entityManager.find(this.entityClass, {
@@ -16,18 +23,27 @@ export class MemberRepository extends DddRepository<Member> {
         id: conditions.id,
         name: conditions.name,
         email: conditions.email,
+        employeeNumber: conditions.employeeNumber,
         ...checkLikeValue({ searchKey: conditions.searchKey, searchValue: conditions.searchValue }),
       }),
       ...convertOptions(options),
     });
   }
 
-  async count(conditions: { id?: number; name?: string; email?: string; searchKey?: string; searchValue?: string }) {
+  async count(conditions: {
+    id?: number;
+    name?: string;
+    email?: string;
+    employeeNumber?: string;
+    searchKey?: string;
+    searchValue?: string;
+  }) {
     return this.entityManager.count(this.entityClass, {
       where: stripUndefined({
         id: conditions.id,
         name: conditions.name,
         email: conditions.email,
+        employeeNumber: conditions.employeeNumber,
         ...checkLikeValue({ searchKey: conditions.searchKey, searchValue: conditions.searchValue }),
       }),
     });
