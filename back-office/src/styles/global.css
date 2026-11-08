@@ -1,0 +1,13 @@
+/* antd가 다루지 않는 문서 루트만 정한다. 색·폰트·간격은 src/theme/theme.ts(antd 테마 토큰)에 있다. */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  /* = colorBgLayout (antd 컨텍스트 밖인 body라 직접 지정) */
+  background: #f7f8fc;
+  -webkit-font-smoothing: antialiased;
+}
