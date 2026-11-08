@@ -8,7 +8,7 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
 import { RequestLoggerInterceptor } from '@libs/interceptors';
 
 @Module({
-  imports: [ConfigsModule, DatabasesModule, GlobalDomainModule, ContextModule],
+  imports: [ConfigsModule, DatabasesModule, ContextModule, GlobalDomainModule],
   controllers: [],
   providers: [{ provide: APP_INTERCEPTOR, useClass: RequestLoggerInterceptor }],
 })
