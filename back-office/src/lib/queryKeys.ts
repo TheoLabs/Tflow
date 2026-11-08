@@ -1,10 +1,13 @@
 import type { QueryClient } from '@tanstack/react-query'
-import type { MemberListQuery } from '../types/member'
+import type { AdminMemberListQuery, MemberListQuery } from '../types/member'
 
 export const queryKeys = {
   members: {
     all: ['members'] as const,
+    /** mock 목록 */
     list: (query: MemberListQuery) => ['members', 'list', query] as const,
+    /** core-api 목록 (GET /admins/members) */
+    adminList: (query: AdminMemberListQuery) => ['members', 'admin-list', query] as const,
     detail: (id: number) => ['members', 'detail', id] as const,
     active: ['members', 'active-options'] as const,
   },

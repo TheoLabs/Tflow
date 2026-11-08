@@ -1,7 +1,16 @@
 import { DddRepository } from '@libs/ddd';
 import { Injectable } from '@nestjs/common';
 import { Member } from '../domain/member.entity';
-import { checkLikeValue, convertOptions, stripUndefined, TypeormRelationOptions } from '@libs/utils';
+import {
+  applyLikeSearch,
+  applyPagination,
+  checkInValue,
+  convertOptions,
+  PaginationOptions,
+  stripUndefined,
+  TypeormRelationOptions,
+} from '@libs/utils';
+import { MemberStatus } from '../domain/member.entity';
 
 @Injectable()
 export class MemberRepository extends DddRepository<Member> {
@@ -13,8 +22,7 @@ export class MemberRepository extends DddRepository<Member> {
       name?: string;
       email?: string;
       employeeNumber?: string;
-      searchKey?: string;
-      searchValue?: string;
+      statuses?: MemberStatus[];
     },
     options?: TypeormRelationOptions<Member>
   ) {
@@ -24,7 +32,7 @@ export class MemberRepository extends DddRepository<Member> {
         name: conditions.name,
         email: conditions.email,
         employeeNumber: conditions.employeeNumber,
-        ...checkLikeValue({ searchKey: conditions.searchKey, searchValue: conditions.searchValue }),
+        status: checkInValue(conditions.statuses),
       }),
       ...convertOptions(options),
     });
@@ -35,8 +43,7 @@ export class MemberRepository extends DddRepository<Member> {
     name?: string;
     email?: string;
     employeeNumber?: string;
-    searchKey?: string;
-    searchValue?: string;
+    statuses?: MemberStatus[];
   }) {
     return this.entityManager.count(this.entityClass, {
       where: stripUndefined({
@@ -44,8 +51,25 @@ export class MemberRepository extends DddRepository<Member> {
         name: conditions.name,
         email: conditions.email,
         employeeNumber: conditions.employeeNumber,
-        ...checkLikeValue({ searchKey: conditions.searchKey, searchValue: conditions.searchValue }),
+        status: checkInValue(conditions.statuses),
       }),
     });
+  }
+
+  async findAndCount(conditions: { statuses?: MemberStatus[]; keyword?: string }, options?: PaginationOptions) {
+    const qb = this.createQueryBuilder('member');
+
+    if (conditions.statuses?.length) {
+      qb.andWhere('member.status IN (:...statuses)', { statuses: conditions.statuses });
+    }
+
+    const likeSearch = applyLikeSearch(
+      qb,
+      { name: 'member.name', email: 'member.email', employeeNumber: 'member.employeeNumber' },
+      ['name', 'email', 'employeeNumber'],
+      conditions.keyword
+    );
+
+    return applyPagination(likeSearch, options).getManyAndCount();
   }
 }

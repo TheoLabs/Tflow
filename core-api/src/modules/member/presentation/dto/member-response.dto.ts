@@ -7,6 +7,9 @@ export class AdminMemberResponseDto {
   id: number;
 
   @Expose()
+  name: string;
+
+  @Expose()
   email: string;
 
   @Expose()

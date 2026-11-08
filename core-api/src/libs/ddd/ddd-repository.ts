@@ -16,6 +16,10 @@ export abstract class DddRepository<T extends DddBaseAggregate> {
     return this.context.get<EntityManager>(ContextKey.ENTITY_MANAGER) || this.datasource.manager;
   }
 
+  createQueryBuilder(alias: string) {
+    return this.entityManager.createQueryBuilder<T>(this.entityClass, alias);
+  }
+
   async save(entities: T[]): Promise<void> {
     this.registerTxId(entities);
 

@@ -5,7 +5,7 @@ import { PaginationOptions, pickPagination } from '@libs/utils';
 import { AdminMemberResponseDto, MemberCreateDto } from '../presentation/dto';
 import { Transactional } from '@libs/decorators';
 import { MemberEmailDuplicatedException, MemberEmployeeNumberDuplicatedException } from '../domain/exception';
-import { Member } from '../domain/member.entity';
+import { Member, MemberStatus } from '../domain/member.entity';
 
 @Injectable()
 export class AdminMemberService extends DddService {
@@ -33,11 +33,8 @@ export class AdminMemberService extends DddService {
     await this.memberRepository.save([member]);
   }
 
-  async list({ email }: { email?: string }, options?: PaginationOptions) {
-    const [members, total] = await Promise.all([
-      this.memberRepository.find({ email }, { options }),
-      this.memberRepository.count({ email }),
-    ]);
+  async list({ keyword, statuses }: { keyword?: string; statuses?: MemberStatus[] }, options?: PaginationOptions) {
+    const [members, total] = await this.memberRepository.findAndCount({ statuses, keyword }, options);
 
     return {
       members: members.map((member) => member.toInstance(AdminMemberResponseDto)),

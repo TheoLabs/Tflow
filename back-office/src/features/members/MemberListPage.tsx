@@ -1,84 +1,117 @@
 import { FilterOutlined, PlusOutlined } from '@ant-design/icons'
-import { Badge, Button, Card, Empty, Flex, Input, Segmented, Space, Table, Tag, Typography } from 'antd'
-import type { TableColumnsType } from 'antd'
+import { Button, Card, Empty, Flex, Input, Segmented, Space, Table, Tag, Tooltip, Typography } from 'antd'
+import type { TableColumnsType, TableProps } from 'antd'
+import type { ReactNode } from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '../../components/QueryState'
 import { StatusBadge } from '../../components/StatusBadge'
 import { Page } from '../../layout/Page'
-import { BRAND } from '../../theme/theme'
-import { UNASSIGNED_LABEL } from '../../lib/labels'
-import type { AssignmentFilter, MemberListItem, MemberListQuery, MemberStatus } from '../../types/member'
-import { useDepartments } from '../departments/queries'
-import { useRoles } from '../roles/queries'
+import { MEMBER_STATUS_LABEL } from '../../lib/labels'
+import type { AdminMemberListQuery, AdminMemberResponse, MemberStatus, SortOrder } from '../../types/member'
 import { MemberCreateDrawer } from './MemberCreateDrawer'
-import { MemberFilterDrawer, type MemberFilterValues } from './MemberFilterDrawer'
 import { useMemberList } from './queries'
 
+/**
+ * 직원 목록 — 실제 core-api(GET /admins/members) 연결.
+ *
+ * core-api가 지원하는 것만 연결한다: 이름·이메일·사번 통합 검색(keyword, 부분 일치), 재직 상태 탭(statuses), 페이지(page·limit), 정렬(sort·order).
+ * 부서/역할 필터·미배정 집계·부서/역할 이름은 API가 없어 비활성(준비 중)으로 둔다.
+ * 요약 숫자는 현재 조회 결과의 total만 쓴다(탭별 숫자를 위해 탭마다 따로 호출하지 않는다).
+ * 부서·역할은 mock 데이터로 이름을 채우지 않는다 — 실제 직원과 mock 부서·역할의 id는 서로 무관하다.
+ */
+
 const PAGE_SIZE = 15
+const COMING_SOON = 'core-api 지원 후 제공됩니다'
+const EMPTY_VALUE = '-'
 
-const unassigned = <Typography.Text type="secondary">{UNASSIGNED_LABEL}</Typography.Text>
+/** 정렬 가능한 컬럼 — Table 컬럼 key = core-api 엔티티 컬럼명 */
+const SORTABLE_COLUMNS = ['name', 'employeeNumber', 'status'] as const
+type SortableColumn = (typeof SORTABLE_COLUMNS)[number]
 
-const COLUMNS: TableColumnsType<MemberListItem> = [
-  {
-    key: 'name',
-    title: '이름 / 회사 이메일',
-    render: (_, member) => (
-      <Flex vertical>
-        <Typography.Text strong>{member.name}</Typography.Text>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          {member.email}
-        </Typography.Text>
-      </Flex>
-    ),
-  },
-  { key: 'employeeNumber', title: '사번', dataIndex: 'employeeNumber' },
-  { key: 'department', title: '부서', render: (_, member) => member.department?.name ?? unassigned },
-  { key: 'role', title: '역할', render: (_, member) => member.role?.name ?? unassigned },
-  { key: 'status', title: '재직 상태', render: (_, member) => <StatusBadge status={member.status} /> },
-]
+function isSortableColumn(value: string | null): value is SortableColumn {
+  return (SORTABLE_COLUMNS as readonly string[]).includes(value ?? '')
+}
 
+/** 재직 상태 탭 — '' = 전체(statuses를 보내지 않음). 기본 탭은 전체(mock 시절 기획 그대로) */
 const STATUS_TABS: { value: MemberStatus | ''; label: string }[] = [
   { value: '', label: '전체' },
-  { value: 'active', label: '재직' },
-  { value: 'onLeave', label: '휴직' },
-  { value: 'exited', label: '퇴사' },
+  { value: 'active', label: MEMBER_STATUS_LABEL.active },
+  { value: 'onLeave', label: MEMBER_STATUS_LABEL.onLeave },
+  { value: 'exited', label: MEMBER_STATUS_LABEL.exited },
 ]
 
-function parseAssignment(value: string | null): AssignmentFilter | undefined {
-  if (value === 'none') return 'none'
-  const id = Number(value)
-  return value && Number.isInteger(id) && id > 0 ? id : undefined
+/** 탭만 걸린 빈 결과 문구 */
+const EMPTY_BY_STATUS: Record<MemberStatus, string> = {
+  active: '재직 중인 직원이 없습니다',
+  onLeave: '휴직 중인 직원이 없습니다',
+  exited: '퇴사한 직원이 없습니다',
 }
 
 function parseStatus(value: string | null): MemberStatus | undefined {
   return value === 'active' || value === 'onLeave' || value === 'exited' ? value : undefined
 }
 
-/** URL 쿼리스트링 ↔ 목록 조건 (검색·탭·필터·페이지가 URL에 남는다) */
-function readQuery(params: URLSearchParams): Required<Pick<MemberListQuery, 'page' | 'size'>> & MemberListQuery {
+const toAntOrder = (order: SortOrder) => (order === 'ASC' ? 'ascend' : 'descend')
+
+const emptyValue = <Typography.Text type="secondary">{EMPTY_VALUE}</Typography.Text>
+
+/** API가 없어 아직 못 쓰는 조작 — 비활성 + 안내 툴팁 */
+function ComingSoon({ children }: { children: ReactNode }) {
+  return (
+    <Tooltip title={COMING_SOON}>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'not-allowed' }}>
+        {children}
+        <Tag style={{ marginInlineEnd: 0 }}>준비 중</Tag>
+      </span>
+    </Tooltip>
+  )
+}
+
+/** URL 쿼리스트링 ↔ 목록 조건 (검색·재직 상태·정렬·페이지가 URL에 남는다) */
+interface ListUrlState {
+  /** URL 키는 q(mock 시절과 같음). API로는 keyword로 보낸다. 예전 email 키는 읽지 않는다 */
+  q?: string
+  /** URL 키는 status(단일 값). API로는 statuses=[status]로 보낸다 */
+  status?: MemberStatus
+  page: number
+  sort?: SortableColumn
+  order?: SortOrder
+}
+
+function readUrlState(params: URLSearchParams): ListUrlState {
   const page = Number(params.get('page'))
+  const sort = params.get('sort')
+  const order = params.get('order')
+  const hasSort = isSortableColumn(sort) && (order === 'ASC' || order === 'DESC')
   return {
     q: params.get('q')?.trim() || undefined,
     status: parseStatus(params.get('status')),
-    departmentId: parseAssignment(params.get('departmentId')),
-    roleId: parseAssignment(params.get('roleId')),
     page: Number.isInteger(page) && page > 0 ? page : 1,
-    size: PAGE_SIZE,
+    sort: hasSort ? sort : undefined,
+    order: hasSort ? order : undefined,
   }
 }
 
 export function MemberListPage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
-  const query = useMemo(() => readQuery(params), [params])
-  const [searchInput, setSearchInput] = useState(query.q ?? '')
+  const urlState = useMemo(() => readUrlState(params), [params])
+  const query = useMemo<AdminMemberListQuery>(
+    () => ({
+      keyword: urlState.q,
+      statuses: urlState.status ? [urlState.status] : undefined,
+      page: urlState.page,
+      limit: PAGE_SIZE,
+      sort: urlState.sort,
+      order: urlState.order,
+    }),
+    [urlState],
+  )
+  const [searchInput, setSearchInput] = useState(urlState.q ?? '')
   const [createOpen, setCreateOpen] = useState(false)
-  const [filterOpen, setFilterOpen] = useState(false)
 
   const list = useMemberList(query)
-  const departments = useDepartments()
-  const roles = useRoles()
 
   /** 조건을 바꾸면 기본적으로 1페이지로 돌아간다 */
   const updateParams = (patch: Record<string, string | null>, resetPage = true) => {
@@ -96,8 +129,8 @@ export function MemberListPage() {
     )
   }
 
-  // 검색어는 입력이 멈춘 뒤 300ms 후 URL에 반영
-  const currentQ = query.q ?? ''
+  // 통합 검색은 부분 일치라 입력이 멈춘 뒤 300ms 후 URL(q)에 반영한다. Enter·검색 버튼·지우기는 즉시 반영.
+  const currentQ = urlState.q ?? ''
   // URL의 q가 바깥에서 바뀌면(메뉴 클릭·뒤로 가기 등) 입력창도 맞춘다 — 렌더 중 상태 보정
   const [syncedQ, setSyncedQ] = useState(currentQ)
   if (syncedQ !== currentQ) {
@@ -121,27 +154,114 @@ export function MemberListPage() {
     }, 300)
     return () => window.clearTimeout(timer)
   }, [searchInput, currentQ, setParams])
-
-  const departmentName = (value: AssignmentFilter) =>
-    value === 'none' ? UNASSIGNED_LABEL : (departments.data?.find((d) => d.id === value)?.name ?? `#${value}`)
-  const roleName = (value: AssignmentFilter) =>
-    value === 'none' ? UNASSIGNED_LABEL : (roles.data?.find((r) => r.id === value)?.name ?? `#${value}`)
-
-  const filterValues: MemberFilterValues = {
-    departmentId: query.departmentId == null ? '' : String(query.departmentId),
-    roleId: query.roleId == null ? '' : String(query.roleId),
+  const applySearch = (value: string) => {
+    const trimmed = value.trim()
+    if (trimmed !== currentQ) updateParams({ q: trimmed || null })
   }
-  const activeFilterCount = (query.departmentId != null ? 1 : 0) + (query.roleId != null ? 1 : 0)
-  const hasCondition = Boolean(query.q || query.status || activeFilterCount > 0)
 
-  const resetConditions = () => {
+  const { status } = urlState
+  const keyword = urlState.q
+  const summaryLabel = keyword
+    ? status
+      ? `'${keyword}' 검색 결과 · ${MEMBER_STATUS_LABEL[status]}`
+      : `'${keyword}' 검색 결과`
+    : status
+      ? MEMBER_STATUS_LABEL[status]
+      : '전체'
+
+  const clearSearch = () => {
     setSearchInput('')
-    setParams(new URLSearchParams(), { replace: true })
+    updateParams({ q: null })
   }
+  const showAllStatuses = () => updateParams({ status: null })
+
+  const emptyTitle = keyword
+    ? status
+      ? `'${keyword}' 검색 결과 중 ${MEMBER_STATUS_LABEL[status]} 직원이 없습니다`
+      : `'${keyword}' 검색 결과가 없습니다`
+    : status
+      ? EMPTY_BY_STATUS[status]
+      : '등록된 직원이 없습니다'
+  const emptyHint = keyword
+    ? status
+      ? "다른 검색어를 입력하거나, 재직 상태를 '전체'로 바꿔 보세요."
+      : '이름, 이메일, 사번의 일부로 다시 검색해 보세요.'
+    : status
+      ? '다른 재직 상태를 선택해 보세요.'
+      : '첫 직원을 등록해 보세요.'
 
   const openCreate = () => setCreateOpen(true)
   const data = list.data
   const goDetail = (id: number) => navigate(`/members/${id}`)
+
+  const sortOrderOf = (key: SortableColumn) =>
+    urlState.sort === key && urlState.order ? toAntOrder(urlState.order) : null
+
+  const columns: TableColumnsType<AdminMemberResponse> = [
+    {
+      key: 'name',
+      title: '이름 / 회사 이메일',
+      sorter: true,
+      sortOrder: sortOrderOf('name'),
+      render: (_, member) => (
+        <Flex vertical>
+          <Typography.Text strong>{member.name}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            {member.email}
+          </Typography.Text>
+        </Flex>
+      ),
+    },
+    {
+      key: 'employeeNumber',
+      title: '사번',
+      dataIndex: 'employeeNumber',
+      sorter: true,
+      sortOrder: sortOrderOf('employeeNumber'),
+    },
+    {
+      key: 'department',
+      title: (
+        <Tooltip title={`부서 이름은 ${COMING_SOON}`}>
+          <span>부서</span>
+        </Tooltip>
+      ),
+      render: () => emptyValue,
+    },
+    {
+      key: 'role',
+      title: (
+        <Tooltip title={`역할 이름은 ${COMING_SOON}`}>
+          <span>역할</span>
+        </Tooltip>
+      ),
+      render: () => emptyValue,
+    },
+    {
+      key: 'status',
+      title: '재직 상태',
+      sorter: true,
+      sortOrder: sortOrderOf('status'),
+      render: (_, member) => <StatusBadge status={member.status} />,
+    },
+  ]
+
+  const handleTableChange: TableProps<AdminMemberResponse>['onChange'] = (pagination, _filters, sorter, extra) => {
+    if (extra.action === 'paginate') {
+      const page = pagination.current ?? 1
+      updateParams({ page: page > 1 ? String(page) : null }, false)
+      return
+    }
+    if (extra.action === 'sort') {
+      const single = Array.isArray(sorter) ? sorter[0] : sorter
+      const key = single?.columnKey != null ? String(single.columnKey) : null
+      if (single?.order && isSortableColumn(key)) {
+        updateParams({ sort: key, order: single.order === 'ascend' ? 'ASC' : 'DESC' })
+      } else {
+        updateParams({ sort: null, order: null })
+      }
+    }
+  }
 
   return (
     <Page
@@ -152,75 +272,47 @@ export function MemberListPage() {
         </Button>
       }
     >
-      <Typography.Text type="secondary" style={{ minHeight: 22 }}>
-        {data && (
-          <>
-            전체 <Typography.Text strong>{data.summary.total}명</Typography.Text> · 미배정{' '}
-            <Typography.Text strong>{data.summary.unassigned}명</Typography.Text>
-          </>
-        )}
-      </Typography.Text>
+      <Flex align="center" gap={6} style={{ minHeight: 22 }}>
+        <Typography.Text type="secondary">
+          {summaryLabel}{' '}
+          <Typography.Text strong>{data ? `${data.total}명` : EMPTY_VALUE}</Typography.Text>
+        </Typography.Text>
+        <Typography.Text type="secondary">·</Typography.Text>
+        <Tooltip title={`미배정 집계는 ${COMING_SOON}`}>
+          <Typography.Text type="secondary" disabled>
+            미배정 {EMPTY_VALUE}
+          </Typography.Text>
+        </Tooltip>
+      </Flex>
 
       <Card styles={{ body: { padding: 0 } }}>
         <Flex wrap align="center" gap={12} style={{ padding: '12px 16px' }}>
           <Input.Search
             allowClear
-            placeholder="이름 일부 · 사번 · 회사 이메일로 검색"
-            aria-label="직원 검색"
-            style={{ width: 280 }}
+            placeholder="이름, 이메일, 사번으로 검색"
+            aria-label="이름, 이메일, 사번으로 직원 검색"
+            style={{ width: 300 }}
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onSearch={(value) => {
-              // Enter·검색 버튼은 300ms를 기다리지 않고 바로 반영
-              const trimmed = value.trim()
-              if (trimmed !== currentQ) updateParams({ q: trimmed || null })
+            onChange={(e) => {
+              setSearchInput(e.target.value)
+              // 지우기(×)나 전부 지운 경우는 디바운스 없이 바로 검색 해제
+              if (e.target.value.trim() === '' && currentQ) applySearch('')
             }}
+            onSearch={applySearch}
           />
-          <Segmented
+          <Segmented<MemberStatus | ''>
             aria-label="재직 상태"
-            value={query.status ?? ''}
+            value={status ?? ''}
             options={STATUS_TABS}
             onChange={(value) => updateParams({ status: value || null })}
           />
           <div style={{ flex: 1 }} />
-          <Badge count={activeFilterCount} size="small" color={BRAND.main}>
-            <Button icon={<FilterOutlined />} onClick={() => setFilterOpen(true)}>
+          <ComingSoon>
+            <Button disabled icon={<FilterOutlined />} aria-label="부서·역할 필터 (준비 중)">
               필터
             </Button>
-          </Badge>
+          </ComingSoon>
         </Flex>
-
-        {activeFilterCount > 0 && (
-          <Flex wrap align="center" gap={8} style={{ padding: '0 16px 12px' }}>
-            {query.departmentId != null && (
-              <Tag
-                color="processing"
-                closable={{ 'aria-label': '부서 필터 해제' }}
-                onClose={(e) => {
-                  e.preventDefault()
-                  updateParams({ departmentId: null })
-                }}
-              >
-                부서: {departmentName(query.departmentId)}
-              </Tag>
-            )}
-            {query.roleId != null && (
-              <Tag
-                color="processing"
-                closable={{ 'aria-label': '역할 필터 해제' }}
-                onClose={(e) => {
-                  e.preventDefault()
-                  updateParams({ roleId: null })
-                }}
-              >
-                역할: {roleName(query.roleId)}
-              </Tag>
-            )}
-            <Button type="link" size="small" onClick={() => updateParams({ departmentId: null, roleId: null })}>
-              필터 모두 해제
-            </Button>
-          </Flex>
-        )}
 
         {list.isPending ? (
           <LoadingState />
@@ -231,17 +323,14 @@ export function MemberListPage() {
             style={{ padding: '32px 0' }}
             description={
               <Space orientation="vertical" size={4}>
-                <Typography.Text strong>
-                  {hasCondition ? '조건에 맞는 직원이 없습니다' : '등록된 직원이 없습니다'}
-                </Typography.Text>
-                <Typography.Text type="secondary">
-                  {hasCondition ? '검색어나 필터를 바꿔 보거나 새 직원을 등록하세요.' : '첫 직원을 등록해 보세요.'}
-                </Typography.Text>
+                <Typography.Text strong>{emptyTitle}</Typography.Text>
+                <Typography.Text type="secondary">{emptyHint}</Typography.Text>
               </Space>
             }
           >
             <Space>
-              {hasCondition && <Button onClick={resetConditions}>조건 초기화</Button>}
+              {keyword && <Button onClick={clearSearch}>검색 초기화</Button>}
+              {status && <Button onClick={showAllStatuses}>전체 보기</Button>}
               <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
                 직원 등록
               </Button>
@@ -249,11 +338,13 @@ export function MemberListPage() {
           </Empty>
         ) : (
           data && (
-            <Table<MemberListItem>
+            <Table<AdminMemberResponse>
               rowKey="id"
-              columns={COLUMNS}
-              dataSource={data.items}
+              columns={columns}
+              dataSource={data.members}
               loading={list.isPlaceholderData}
+              showSorterTooltip={false}
+              onChange={handleTableChange}
               onRow={(member) => ({
                 tabIndex: 0,
                 style: { cursor: 'pointer' },
@@ -261,13 +352,12 @@ export function MemberListPage() {
                 onKeyDown: (e) => e.key === 'Enter' && goDetail(member.id),
               })}
               pagination={{
-                current: data.page,
-                pageSize: data.size,
+                current: data.page ?? urlState.page,
+                pageSize: data.limit ?? PAGE_SIZE,
                 total: data.total,
                 showSizeChanger: false,
                 showTotal: (total, [from, to]) => `${from}–${to} / 총 ${total}명`,
                 style: { paddingInline: 16 },
-                onChange: (page) => updateParams({ page: page > 1 ? String(page) : null }, false),
               }}
             />
           )
@@ -275,18 +365,6 @@ export function MemberListPage() {
       </Card>
 
       {createOpen && <MemberCreateDrawer onClose={() => setCreateOpen(false)} />}
-      {filterOpen && (
-        <MemberFilterDrawer
-          initial={filterValues}
-          departments={departments.data ?? []}
-          roles={roles.data ?? []}
-          onClose={() => setFilterOpen(false)}
-          onApply={(values) => {
-            updateParams({ departmentId: values.departmentId || null, roleId: values.roleId || null })
-            setFilterOpen(false)
-          }}
-        />
-      )}
     </Page>
   )
 }

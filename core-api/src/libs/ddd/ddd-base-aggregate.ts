@@ -39,6 +39,6 @@ export abstract class DddBaseAggregate {
   }
 
   toInstance<T>(dto: ClassConstructor<T>, args?: Record<string, unknown>) {
-    return plainToInstance(dto, { ...this, ...args });
+    return plainToInstance(dto, { ...this, ...args }, { excludeExtraneousValues: true });
   }
 }

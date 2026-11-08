@@ -1,4 +1,16 @@
-// 임시 타입 — core-api DTO 확정 시 맞출 것
+// mock 화면용 임시 타입 — core-api에 해당 API가 생기면 DTO에 맞출 것
+
+/** core-api 공통 응답 봉투 — 성공·실패 모두 { data: ... } 로 감싼다 */
+export interface ApiEnvelope<T> {
+  data: T
+}
+
+/** core-api 오류 응답의 data (ExceptionFilter). 4xx의 message는 사용자에게 보여 줄 문구다 */
+export interface ApiErrorBody {
+  code: string
+  /** 보통 문자열. ValidationPipe 폴백 등에서 배열이 올 수 있다 */
+  message: string | string[]
+}
 
 /** id와 이름만 담은 참조(부서·역할·부서장 등) */
 export interface IdName {

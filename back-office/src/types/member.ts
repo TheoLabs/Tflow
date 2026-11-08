@@ -1,7 +1,59 @@
-// 임시 타입 — core-api DTO 확정 시 맞출 것
+/**
+ * 직원 타입.
+ * - 「core-api 실제 스펙」 블록: core-api `GET /admins/members` 기준(AdminMemberQueryDto · AdminMemberResponseDto).
+ *   직원 목록 화면(/members)이 쓴다.
+ * - 그 아래 나머지: 아직 mock(src/mocks)으로 동작하는 화면(상세·등록·수정·상태 변경·부서장 선택지)용 임시 타입.
+ *   core-api에 해당 API가 생기면 그 DTO에 맞춘다.
+ */
 import type { IdName, Page } from './common'
 
 export type MemberStatus = 'active' | 'onLeave' | 'exited'
+
+// ─── core-api 실제 스펙: GET /admins/members ───────────────────────────────
+
+/** 정렬 방향 — core-api OrderType */
+export type SortOrder = 'ASC' | 'DESC'
+
+/** GET /admins/members 쿼리 (AdminMemberQueryDto, 전부 선택) */
+export interface AdminMemberListQuery {
+  /**
+   * 통합 검색어 — 이름·회사 이메일·사번 세 컬럼을 부분 일치(LIKE '%keyword%')로 OR 검색한다.
+   * 검색 컬럼을 고르는 파라미터는 없다. statuses와는 AND로 조합된다.
+   */
+  keyword?: string
+  /**
+   * 재직 상태 — 이 중 하나라도 해당하면 포함(status IN (...)). 없거나 빈 배열이면 전체.
+   * 쿼리는 같은 키 반복(`statuses=active&statuses=onLeave`)으로만 보낸다 — 쉼표 구분·`statuses[]`는 인식되지 않는다.
+   */
+  statuses?: MemberStatus[]
+  page?: number
+  limit?: number
+  /** 엔티티 컬럼명. order와 함께 보내야 정렬이 적용된다 */
+  sort?: string
+  order?: SortOrder
+}
+
+/**
+ * AdminMemberResponseDto — 공식 필드는 id · name · email · employeeNumber · status 다(모두 @Expose).
+ * 입사일·퇴사일·부서·역할은 이 응답에 없다. 목록 화면은 부서·역할을 '-'로 둔다.
+ */
+export interface AdminMemberResponse {
+  id: number
+  name: string
+  email: string
+  employeeNumber: string
+  status: MemberStatus
+}
+
+/** GET /admins/members 응답의 data. page·limit은 요청에 보낸 값이 그대로 돌아온다(안 보내면 없음) */
+export interface AdminMemberListResponse {
+  members: AdminMemberResponse[]
+  total: number
+  page?: number
+  limit?: number
+}
+
+// ─── 이하 mock 화면용 임시 타입 ──────────────────────────────────────────
 
 export interface Member {
   id: number
