@@ -31,17 +31,22 @@ export function toDepartmentFormValues(department: DepartmentListItem): Departme
 }
 
 /**
- * 등록 요청(실제 core-api). 상위 부서는 보내지 않는다 — 선택지가 mock 부서 id라 실제 서버에 없기 때문이다.
- * 부서 목록 API가 생기기 전까지는 최상위 부서로만 등록된다.
+ * 등록 요청(실제 core-api). 상위 부서 값은 ParentDepartmentSelect가 실제 부서 목록 API에서 고른 id다.
+ * 미지정('')인 상위 부서 · 부서장은 키를 생략한다(= 최상위 / 부서장 없음).
  */
 export function toCreateDepartmentRequest(values: DepartmentFormValues): CreateDepartmentRequest {
-  return {
-    name: values.name,
-    leaderMemberId: selectToId(values.leaderMemberId),
-  }
+  const request: CreateDepartmentRequest = { name: values.name }
+  const parentId = selectToId(values.parentId)
+  if (parentId != null) request.parentId = parentId
+  const leaderMemberId = selectToId(values.leaderMemberId)
+  if (leaderMemberId != null) request.leaderMemberId = leaderMemberId
+  return request
 }
 
-/** 부서 등록 시 core-api 오류 코드 → 표시할 폼 항목 */
+/**
+ * 부서 등록 시 core-api 오류 코드 → 표시할 폼 항목.
+ * DEPARTMENT_NOT_FOUND(404)는 등록 API에서 상위 부서 id가 없을 때만 난다(고른 뒤 다른 곳에서 삭제된 경우 등).
+ */
 export const CREATE_DEPARTMENT_ERROR_FIELDS: Readonly<Record<string, DepartmentFormField>> = {
   DEPARTMENT_NAME_DUPLICATED: 'name',
   DEPARTMENT_NOT_FOUND: 'parentId',

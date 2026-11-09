@@ -1,7 +1,14 @@
 import { DddRepository } from '@libs/ddd';
 import { Injectable } from '@nestjs/common';
 import { Department } from '../domain/department.entity';
-import { convertOptions, stripUndefined, TypeormRelationOptions } from '@libs/utils';
+import {
+  applyLikeSearch,
+  convertOptions,
+  PaginationOptions,
+  stripUndefined,
+  TypeormRelationOptions,
+  applyPagination,
+} from '@libs/utils';
 
 @Injectable()
 export class DepartmentRepository extends DddRepository<Department> {
@@ -24,5 +31,13 @@ export class DepartmentRepository extends DddRepository<Department> {
         name: conditions.name,
       }),
     });
+  }
+
+  async findAndCount(conditions: { keyword?: string }, options?: PaginationOptions) {
+    const qb = this.createQueryBuilder('department').orderBy('department.name', 'ASC');
+
+    const likeSearch = applyLikeSearch(qb, { name: 'department.name' }, ['name'], conditions.keyword);
+
+    return applyPagination(likeSearch, options).getManyAndCount();
   }
 }

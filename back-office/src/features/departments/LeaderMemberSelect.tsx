@@ -27,7 +27,7 @@ interface LeaderMemberSelectProps {
  * 부서장 선택(실제 core-api) — 재직 직원을 서버에서 검색한다(GET /admins/members?statuses=active&keyword=).
  * 직원이 수백 명이어도 한 번에 다 받지 않고, 입력을 300ms 디바운스해 keyword로 좁힌 상위 일부만 보여 준다.
  * 고른 직원은 검색어가 바뀌어도 라벨이 유지되도록 따로 기억한다.
- * 부서 등록 폼 전용이다. 부서 수정 폼은 아직 mock 직원 선택지(useActiveMemberOptions)를 쓴다.
+ * 부서 등록 폼 전용이다(부서 수정 API는 아직 없다).
  */
 export function LeaderMemberSelect({ id, ref, value, onChange, onBlur, status }: LeaderMemberSelectProps) {
   const [search, setSearch] = useState('')

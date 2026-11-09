@@ -1,10 +1,10 @@
 import { Flex, Tree, Typography, type TreeDataNode } from 'antd'
 import { useMemo, useState } from 'react'
-import type { DepartmentListItem } from '../../types/department'
+import type { DepartmentTreeItem } from '../../types/department'
 import { buildDepartmentTree, type DepartmentTreeNode } from './tree'
 
 interface DepartmentTreeProps {
-  departments: DepartmentListItem[]
+  departments: DepartmentTreeItem[]
   selectedId: number | null
   onSelect: (id: number) => void
 }

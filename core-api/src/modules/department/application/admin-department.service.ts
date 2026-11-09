@@ -8,6 +8,8 @@ import { Department } from '../domain/department.entity';
 import { MemberRepository } from '@modules/member/infrastructure/member.repository';
 import { MemberNotFoundException } from '@modules/member/domain/exception';
 import { MemberStatus } from '@modules/member/domain/member.entity';
+import { PaginationOptions, pickPagination } from '@libs/utils';
+import { DepartmentResponseDto } from '../presentation/dto/department-response.dto';
 
 @Injectable()
 export class AdminDepartmentService extends DddService {
@@ -18,7 +20,6 @@ export class AdminDepartmentService extends DddService {
     super();
   }
 
-  // TODO: 멤버 검증 로직 해야함.
   @Transactional()
   async create({ name, parentDepartmentId, leaderMemberId }: DepartmentCreateDto) {
     const [existingDepartment] = await this.departmentRepository.find({ name });
@@ -36,7 +37,10 @@ export class AdminDepartmentService extends DddService {
     }
 
     if (leaderMemberId) {
-      const [leaderMember] = await this.memberRepository.find({ id: leaderMemberId, statuses: [MemberStatus.ACTIVE] });
+      const [leaderMember] = await this.memberRepository.find({
+        ids: [leaderMemberId],
+        statuses: [MemberStatus.ACTIVE],
+      });
 
       if (!leaderMember) {
         throw new MemberNotFoundException(leaderMemberId);
@@ -46,5 +50,31 @@ export class AdminDepartmentService extends DddService {
     const department = Department.of({ name, parentDepartmentId, leaderMemberId });
 
     await this.departmentRepository.save([department]);
+  }
+
+  async list({ keyword }: { keyword?: string }, options?: PaginationOptions) {
+    const [departments, total] = await this.departmentRepository.findAndCount({ keyword }, options);
+
+    return {
+      departments: departments.map((department) => department.toInstance(DepartmentResponseDto)),
+      total,
+      ...pickPagination(options),
+    };
+  }
+
+  /**
+   * 부서 트리 API
+   */
+  async listTree() {
+    const departments = await this.departmentRepository.find({});
+
+    const memberCounts = await this.memberRepository.countByDepartment({
+      departmentIds: departments.map((department) => department.id),
+    });
+
+    return departments.map((department) => ({
+      ...department.toInstance(DepartmentResponseDto),
+      memberCount: memberCounts.get(department.id) ?? 0,
+    }));
   }
 }

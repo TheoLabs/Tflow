@@ -15,7 +15,14 @@ export const queryKeys = {
   },
   departments: {
     all: ['departments'] as const,
+    /** mock 목록 — 직원 화면의 부서 선택지 */
     list: ['departments', 'list'] as const,
+    /** core-api 부서 트리(GET /admins/departments/tree) */
+    tree: ['departments', 'tree'] as const,
+    /** core-api 부서 검색(GET /admins/departments) 전체 — 등록 후 무효화용 접두어 */
+    adminSearchAll: ['departments', 'admin-search'] as const,
+    /** core-api 부서 검색(상위 부서 선택지) */
+    adminSearch: (keyword: string) => ['departments', 'admin-search', keyword] as const,
   },
   roles: {
     all: ['roles'] as const,
