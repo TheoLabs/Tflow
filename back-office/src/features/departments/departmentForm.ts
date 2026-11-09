@@ -30,12 +30,22 @@ export function toDepartmentFormValues(department: DepartmentListItem): Departme
   }
 }
 
+/**
+ * 등록 요청(실제 core-api). 상위 부서는 보내지 않는다 — 선택지가 mock 부서 id라 실제 서버에 없기 때문이다.
+ * 부서 목록 API가 생기기 전까지는 최상위 부서로만 등록된다.
+ */
 export function toCreateDepartmentRequest(values: DepartmentFormValues): CreateDepartmentRequest {
   return {
     name: values.name,
-    parentId: selectToId(values.parentId),
     leaderMemberId: selectToId(values.leaderMemberId),
   }
+}
+
+/** 부서 등록 시 core-api 오류 코드 → 표시할 폼 항목 */
+export const CREATE_DEPARTMENT_ERROR_FIELDS: Readonly<Record<string, DepartmentFormField>> = {
+  DEPARTMENT_NAME_DUPLICATED: 'name',
+  DEPARTMENT_NOT_FOUND: 'parentId',
+  MEMBER_NOT_FOUND: 'leaderMemberId',
 }
 
 /** 바뀐 필드만: 키 없음 = 유지, null = 비움(최상위 / 부서장 없음), 값 = 변경 */

@@ -10,6 +10,8 @@ export const queryKeys = {
     adminList: (query: AdminMemberListQuery) => ['members', 'admin-list', query] as const,
     detail: (id: number) => ['members', 'detail', id] as const,
     active: ['members', 'active-options'] as const,
+    /** core-api 재직 직원 검색(부서장 선택지) */
+    activeSearch: (keyword: string) => ['members', 'active-search', keyword] as const,
   },
   departments: {
     all: ['departments'] as const,

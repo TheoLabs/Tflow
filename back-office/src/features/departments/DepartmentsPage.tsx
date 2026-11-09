@@ -72,7 +72,6 @@ export function DepartmentsPage() {
                 department={isCreate ? null : selected}
                 departments={list}
                 activeMembers={activeMembers.data ?? []}
-                onCreated={(id) => setSelection({ mode: 'edit', id })}
                 onDeleted={() => setSelection(null)}
                 onCancelCreate={() => setSelection(null)}
               />

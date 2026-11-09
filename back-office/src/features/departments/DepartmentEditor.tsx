@@ -1,6 +1,6 @@
 import { yupResolver } from '@hookform/resolvers/yup'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { App, Button, Card, Flex, Form, Input, Select, Space, Typography } from 'antd'
+import { Alert, App, Button, Card, Flex, Form, Input, Select, Space, Tooltip, Typography } from 'antd'
 import { useMemo } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { useNavigate } from 'react-router-dom'
@@ -11,12 +11,13 @@ import {
   updateDepartment,
 } from '../../api/departments'
 import { getErrorMessage } from '../../api/errors'
-import { applyServerErrors, dirtyFieldNames, isFieldDirty } from '../../lib/form'
+import { applyServerErrorCodes, applyServerErrors, dirtyFieldNames, isFieldDirty } from '../../lib/form'
 import { dirtyLabel, fieldStatus } from '../../lib/formItem'
 import { invalidateOrganization } from '../../lib/queryKeys'
 import type { DepartmentListItem, UpdateDepartmentPatch } from '../../types/department'
 import type { MemberListItem } from '../../types/member'
 import {
+  CREATE_DEPARTMENT_ERROR_FIELDS,
   DEPARTMENT_FORM_FIELDS,
   buildDepartmentPatch,
   departmentFormSchema,
@@ -25,14 +26,15 @@ import {
   toDepartmentFormValues,
   type DepartmentFormValues,
 } from './departmentForm'
+import { LeaderMemberSelect } from './LeaderMemberSelect'
 import { collectDescendantIds, departmentSelectOptions } from './tree'
 
 interface DepartmentEditorProps {
   /** 없으면 새 부서 모드 */
   department: DepartmentListItem | null
   departments: DepartmentListItem[]
+  /** 부서 수정 폼의 부서장 선택지(mock). 등록 폼은 LeaderMemberSelect가 실제 API로 검색한다 */
   activeMembers: MemberListItem[]
-  onCreated: (id: number) => void
   onDeleted: () => void
   onCancelCreate: () => void
 }
@@ -41,7 +43,6 @@ export function DepartmentEditor({
   department,
   departments,
   activeMembers,
-  onCreated,
   onDeleted,
   onCancelCreate,
 }: DepartmentEditorProps) {
@@ -76,9 +77,11 @@ export function DepartmentEditor({
   const leaderMissing =
     department?.leader != null && !activeMembers.some((m) => m.id === department.leader!.id)
 
-  const saveMutation = useMutation({
+  // 등록: 실제 core-api(POST /admins/departments). 수정: 아직 mock
+  const createMutation = useMutation({ mutationFn: createDepartment })
+  const updateMutation = useMutation({
     mutationFn: async (values: DepartmentFormValues) => {
-      if (isCreate) return createDepartment(toCreateDepartmentRequest(values))
+      if (isCreate) return null
       const patch: UpdateDepartmentPatch = buildDepartmentPatch(values, form.formState.dirtyFields)
       if (Object.keys(patch).length === 0) return null
       return updateDepartment(department.id, patch)
@@ -86,20 +89,29 @@ export function DepartmentEditor({
   })
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (isCreate) {
+      try {
+        await createMutation.mutateAsync(toCreateDepartmentRequest(values))
+        // core-api가 id를 돌려주지 않고 부서 트리는 아직 mock이라 새 부서가 트리에 나타나지 않는다.
+        // mock 스토어에 끼워 넣지 않는다. 등록 패널은 비운 채 유지해 안내 Alert를 계속 보여 준다.
+        message.success('부서가 등록되었습니다')
+        form.reset(emptyDepartmentForm())
+      } catch (error) {
+        applyServerErrorCodes(error, form.setError, CREATE_DEPARTMENT_ERROR_FIELDS, DEPARTMENT_FORM_FIELDS, (text) =>
+          message.error(text),
+        )
+      }
+      return
+    }
     try {
-      const saved = await saveMutation.mutateAsync(values)
+      const saved = await updateMutation.mutateAsync(values)
       if (saved == null) {
         message.info('변경된 항목이 없습니다.')
         return
       }
       await invalidateOrganization(queryClient)
-      if (isCreate) {
-        message.success(`'${saved.name}' 부서를 추가했습니다.`)
-        onCreated(saved.id)
-      } else {
-        form.reset(toDepartmentFormValues(saved))
-        message.success('부서를 저장했습니다.')
-      }
+      form.reset(toDepartmentFormValues(saved))
+      message.success('부서를 저장했습니다.')
     } catch (error) {
       applyServerErrors(error, form.setError, DEPARTMENT_FORM_FIELDS, (text) => message.error(text))
     }
@@ -175,13 +187,25 @@ export function DepartmentEditor({
         )
       }
     >
+      {isCreate && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          title="부서 목록은 아직 mock 데이터입니다. 등록한 부서는 목록 API 연동 후 표시됩니다."
+          description="등록은 실제 서버에 저장됩니다. 상위 부서는 부서 목록 API 준비 전까지 지정할 수 없어 최상위 부서로 등록됩니다."
+        />
+      )}
       <form onSubmit={onSubmit} noValidate>
         <Form layout="vertical" component={false}>
           <Form.Item
             label={dirtyLabel('부서명', dirty('name'))}
             htmlFor="dept-name"
             required
-            {...fieldStatus(errors.name?.message, '같은 상위 부서 아래에서는 이름이 겹칠 수 없습니다.')}
+            {...fieldStatus(
+              errors.name?.message,
+              isCreate ? '부서 이름은 전체 부서에서 겹칠 수 없습니다.' : '같은 상위 부서 아래에서는 이름이 겹칠 수 없습니다.',
+            )}
           >
             <Controller
               control={control}
@@ -192,22 +216,40 @@ export function DepartmentEditor({
           <Form.Item
             label={dirtyLabel('상위 부서', dirty('parentId'))}
             htmlFor="dept-parent"
-            {...fieldStatus(errors.parentId?.message, isCreate ? undefined : '자기 자신과 하위 부서는 고를 수 없습니다.')}
+            {...fieldStatus(
+              errors.parentId?.message,
+              isCreate ? '지금은 최상위 부서로만 등록됩니다.' : '자기 자신과 하위 부서는 고를 수 없습니다.',
+            )}
           >
-            <Controller
-              control={control}
-              name="parentId"
-              render={({ field }) => (
-                <Select
-                  id="dept-parent"
-                  ref={field.ref}
-                  options={parentOptions}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                />
-              )}
-            />
+            {isCreate ? (
+              // 선택지가 mock 부서 id라 실제 서버로 보내면 404가 난다 → 부서 목록 API가 생길 때까지 비활성
+              <Tooltip title="부서 목록 API 준비 후 제공">
+                <div>
+                  <Select
+                    id="dept-parent"
+                    disabled
+                    value=""
+                    options={[{ value: '', label: '(최상위)' }]}
+                    status={errors.parentId ? 'error' : undefined}
+                  />
+                </div>
+              </Tooltip>
+            ) : (
+              <Controller
+                control={control}
+                name="parentId"
+                render={({ field }) => (
+                  <Select
+                    id="dept-parent"
+                    ref={field.ref}
+                    options={parentOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
+              />
+            )}
           </Form.Item>
           <Form.Item
             label={dirtyLabel('부서장', dirty('leaderMemberId'))}
@@ -217,16 +259,27 @@ export function DepartmentEditor({
             <Controller
               control={control}
               name="leaderMemberId"
-              render={({ field }) => (
-                <Select
-                  id="dept-leader"
-                  ref={field.ref}
-                  options={leaderOptions}
-                  value={field.value}
-                  onChange={field.onChange}
-                  onBlur={field.onBlur}
-                />
-              )}
+              render={({ field }) =>
+                isCreate ? (
+                  <LeaderMemberSelect
+                    id="dept-leader"
+                    ref={field.ref}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                    status={errors.leaderMemberId ? 'error' : undefined}
+                  />
+                ) : (
+                  <Select
+                    id="dept-leader"
+                    ref={field.ref}
+                    options={leaderOptions}
+                    value={field.value}
+                    onChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )
+              }
             />
           </Form.Item>
         </Form>

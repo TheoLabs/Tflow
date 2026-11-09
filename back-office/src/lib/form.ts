@@ -65,3 +65,25 @@ export function blankToNull(value: string): string | null {
   const trimmed = value.trim()
   return trimmed === '' ? null : trimmed
 }
+
+/**
+ * core-api 오류 코드(ApiError.code)를 폼 항목 오류로 표시한다.
+ * core-api는 fieldErrors를 주지 않고 `{ code, message }`만 주므로, 화면이 code → 항목을 정해 준다.
+ * - codeToField에 있는 code면 그 항목에 서버 message를 붙이고 포커스한다.
+ * - 없으면 applyServerErrors로 넘긴다(mock fieldErrors 처리 또는 notify로 문구 표시 — BAD_REQUEST 등).
+ * @returns 항목에 붙인 오류가 하나라도 있으면 true
+ */
+export function applyServerErrorCodes<T extends FieldValues>(
+  error: unknown,
+  setError: UseFormSetError<T>,
+  codeToField: Readonly<Partial<Record<string, Path<T>>>>,
+  fields: readonly Path<T>[],
+  notify: (message: string) => void,
+): boolean {
+  const field = isApiError(error) && error.code ? codeToField[error.code] : undefined
+  if (field) {
+    setError(field, { type: 'server', message: getErrorMessage(error) }, { shouldFocus: true })
+    return true
+  }
+  return applyServerErrors(error, setError, fields, notify)
+}

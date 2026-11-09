@@ -22,3 +22,14 @@ export class MemberEmployeeNumberDuplicatedException extends DddException {
     });
   }
 }
+
+export class MemberNotFoundException extends DddException {
+  constructor(memberId: number) {
+    super({
+      statusCode: HttpStatus.NOT_FOUND,
+      errorCode: 'MEMBER_NOT_FOUND',
+      clientMessage: '존재하지 않는 멤버입니다.',
+      serverMessage: `Member(${memberId}) not found.`,
+    });
+  }
+}
